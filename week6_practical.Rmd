@@ -9,3 +9,130 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+## Brief:
+Part 1:  explore some techniques for analysing patterns of point data in R.
+
+Part 2: explore spatial autocorrelation using R or ArcGIS. analyse the patterns of Blue Plaques — linking the buildings of the present to people of the past
+
+## Question
+“For any given London Borough, are the Blue Plaques within that borough distributed randomly or do they exhibit some kind of dispersed or clustered pattern?”
+
+
+## load in m libraries
+includes point pattern analysis tools found in spatstat
+```{r}
+library(spatstat)
+library(here)
+library(sp)
+library(rgeos)
+library(maptools)
+library(GISTools)
+library(tmap)
+library(sf)
+library(geojson)
+library(geojsonio)
+library(tmaptools)
+library(stringr)
+library(tidyverse)
+```
+
+## Load in SPATIAL DATA
+
+```{r}
+#1 get the London Borough Boundaries
+LondonBoroughs <- st_read(here::here("Data", "statistical-gis-boundaries-london", "ESRI", "London_Borough_Excluding_MHW.shp"))
+
+
+#2 get the location of all Blue Plaques in the City
+BluePlaques <- st_read("https://s3.eu-west-2.amazonaws.com/openplaques/open-plaques-london-2018-04-08.geojson")%>%
+  st_transform(.,27700)
+```
+## Extract and summarize, plot  London Borough
+
+```{r}
+#pull out london from london boroughs using string detect function
+
+BoroughMap <- LondonBoroughs %>%
+  dplyr::filter(str_detect(GSS_CODE, "^E09"))%>%
+  st_transform(., 27700)
+
+summary(BoroughMap)
+
+#Draw a thematic map quickly
+qtm(BoroughMap)
+
+
+```
+
+## Overlaying both: plot the blue plaques in the city
+
+```{r}
+#setting up t map for plotting
+tmap_mode("plot")
+
+#1 boroughmap
+#2 map no color, transparency is 0.5
+tm_shape(BoroughMap)+
+  tm_polygons(col= NA, alpha = 0.5) +
+tm_shape(BluePlaques)+
+  tm_dots(col = "blue")
+  
+  
+```
+
+## Clean plaque data
+remove duplicates and select only those inside london-clip
+
+note: default is intersects, but we could also use:
+BluePlaquesSub <- BluePlaques[BoroughMap, , op = st_within], 
+
+```{r}
+#remove duplicates (same grid refence.causes issue later in the analysis )
+#sf and tidyverse
+BluePlaques <- distinct(BluePlaques)
+
+
+#Now just select the points inside London:clipping to borough map
+BluePlaquesSub <- BluePlaques[BoroughMap,]
+
+
+#remap to see if they have been removed
+tmap_mode("plot")
+tm_shape(BoroughMap) +
+  tm_polygons(col = NA, alpha = 0.5) +
+tm_shape(BluePlaquesSub) +
+  tm_dots(col = "blue")
+
+```
+
+## Select study Area for the analysis
+1. subset our SpatialPolygonsDataFrame to pull out a borough we are interested in. I’m going to choose Harrow
+
+
+```{r}
+Harrow <- BoroughMap %>%
+  filter(., NAME=="Harrow")  #select row where col 'NAME' is Harrow
+
+#Check to see that the correct borough has been pulled out
+tm_shape(Harrow) +
+  tm_polygons(col = NA, alpha = 0.5)
+```
+
+## clip our Blue Plaques: fall within harrow
+
+```{r}
+#select the points inside Harrow :clipping to Harrow Boundary
+BluePlaquesSub <- BluePlaques[Harrow,]
+
+#check that it's worked
+
+#sets up tmap for plotting
+tmap_mode("plot")
+
+#maps both the harrow shp file overlayed with clipped blue plaque points
+tm_shape(Harrow) +
+  tm_polygons(col = NA, alpha = 0.5) +
+tm_shape(BluePlaquesSub) +
+  tm_dots(col = "blue")
+```
+
